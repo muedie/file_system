@@ -1,3 +1,7 @@
+/**
+ *  Safal Lamsal 
+**/
+
 #define _GNU_SOURCE
 
 #include <stdio.h>
@@ -42,6 +46,9 @@ struct inode {
 
 struct inode * inode_array_ptr[NUM_INODES];
 
+int del_counter = 0;
+int del_array[128]; // Holds deleted items inode index
+
 /**
   Description: Initializes the file system.
   return (void)
@@ -64,6 +71,8 @@ void init() {
     for ( j = 0; j < MAX_BLOCKS_PER_FILE; j++) {
       inode_array_ptr[i]->blocks[j] = -1;
     }
+
+    del_array[i] = -1; // set up delition array
   }
 }
 
@@ -192,6 +201,7 @@ void put (char** args) {
   directory_ptr[dir_idx].used = 1;
   directory_ptr[dir_idx].name = (char*)malloc(strlen(args[1]));
   strncpy(directory_ptr[dir_idx].name, args[1], strlen(args[1]));
+  directory_ptr[dir_idx].name[strlen(args[1])] = 0;
   directory_ptr[dir_idx].inode_idx = inode_idx;
   
   inode_array_ptr[inode_idx]->size = buf.st_size;
@@ -292,7 +302,6 @@ void get (char** args) {
     filename = args[2];
   }
   
-  //printf("FILE: %s\t%s\n", directory_ptr[index].name, filename);
   
   FILE* fp = fopen(filename, "w");
   
@@ -375,6 +384,94 @@ void del (char** args) {
 
 /**
   @params: args - User Input
+  Description:  Marks the file as deleted from the file system.
+  return (void)
+**/
+void psuedo_del (char** args) {
+  if (args[1] == NULL) {
+    printf("Error:\tInvalid input.\nUsage:\tdel <filename>\n\n");
+    return;
+  }
+  
+  int i, index = -1;
+  for (i = 0; i < NUM_FILES; i++) {
+    if (directory_ptr[i].used == 1) {
+      if (strcmp(directory_ptr[i].name, args[1]) == 0) {
+        index = i;    
+        directory_ptr[i].used = 0;
+
+        int j = 0;
+        while (del_array[j] != -1) {
+          j++;
+        }
+
+        del_array[j] = i;
+        del_counter++;
+      
+        break;
+      }
+    }
+  }
+  
+  if (index == -1) {
+    printf("Error: File not found.\n\n");
+    return;
+  }
+
+}
+
+/**
+  Description:  Deletes the file inside del_array from the file system.
+  return (void)
+**/
+void clear_del() {
+  int i;
+  for (i = 0; i <= del_counter; i++) {
+
+    if (del_array[i] != -1) {
+      int i_index = directory_ptr[del_array[i]].inode_idx;
+      inode_array_ptr[i_index]->used = 0;
+      
+      int j;
+      for (j = 0; j < MAX_BLOCKS_PER_FILE; j++) {
+        int block = inode_array_ptr[i_index]->blocks[j];
+        inode_array_ptr[i_index]->blocks[j] = -1;
+        used_blocks[block] = 0;
+      }
+    }
+
+    del_array[i] = -1;
+  }
+
+  del_counter = 0;
+}
+
+/**
+  @params: args - User Input
+  Description:  Un-Deletes the file from the file system.
+  return (void)
+**/
+void undelete(char** args) {
+
+  if (args[1] == NULL) {
+    printf("Error:\tInvalid input.\nUsage:\tundelete <filename>\n\n");
+    return;
+  }
+
+  int i;
+  for (i = 0; i < del_counter; i++) {
+    char* name = directory_ptr[del_array[i]].name;
+    if (strcmp(name, args[1]) == 0) {
+      directory_ptr[i].used = 1;
+      break;
+    }
+  }
+
+  del_array[i] = -1;
+}
+
+/**
+  @params: args - User Input
   Description:  Lists the files in the file system.
   return (void)
 **/
@@ -445,16 +542,22 @@ int main(int argc, char *argv[]) {
     if (strcmp(token[0], "exit") == 0 || strcmp(token[0], "quit") == 0) exit(0);
     
     if (strcmp(token[0], "put") == 0) {
+      if (del_counter > 0) {
+        clear_del();
+      }
       put(token);
     } else if (strcmp(token[0], "get") == 0) {
       get(token);
     } else if (strcmp(token[0], "del") == 0) {
-      del(token);
+      psuedo_del(token);
+      //del(token);
     } else if (strcmp(token[0], "list") == 0) {
       list(token);
     } else if (strcmp(token[0], "df") == 0) {
       printf("Disk Space: %d bytes.\n", df());
-    } else {
+    } else if (strcmp(token[0], "undelete") == 0) {
+      undelete(token);
+    } else{
       printf("Error: Invalid Command.\n\n");
     }
 
